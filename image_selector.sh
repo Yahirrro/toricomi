@@ -7,6 +7,156 @@
 # デバッグモード（1=有効、0=無効）
 DEBUG=0
 
+##################################################
+# 多言語対応（国際化）設定
+##################################################
+
+# 言語設定 ("ja"=日本語, "en"=英語)
+LANG_CODE=""
+
+# コマンドライン引数の解析
+parse_arguments() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -l|--lang)
+        if [ -n "$2" ]; then
+          LANG_CODE="$2"
+          shift 2
+        else
+          echo "Error: Language code required after $1 option"
+          exit 1
+        fi
+        ;;
+      -d|--debug)
+        DEBUG=1
+        shift
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+}
+
+# システムの言語設定を自動検出
+detect_system_language() {
+  local sys_lang=""
+  # システム言語設定の取得を試みる
+  if [ -n "$LANG" ]; then
+    sys_lang="${LANG%%_*}"
+    sys_lang="${sys_lang%%.*}"
+  fi
+
+  # 対応している言語かチェック
+  case "$sys_lang" in
+    "ja") LANG_CODE="ja" ;;
+    "en") LANG_CODE="en" ;;
+    *) LANG_CODE="en" ;;  # デフォルトは英語
+  esac
+
+  [ "$DEBUG" -eq 1 ] && echo "システム言語: $sys_lang, 設定言語: $LANG_CODE"
+}
+
+# 言語設定を適用
+apply_language_settings() {
+  # 言語が未設定の場合、自動検出
+  if [ -z "$LANG_CODE" ]; then
+    detect_system_language
+  fi
+
+  # 言語ファイルのパス
+  local lang_file="${script_dir}/lang/${LANG_CODE}.sh"
+  
+  # 言語ファイルが存在するか確認
+  if [ -f "$lang_file" ]; then
+    source "$lang_file"
+  else
+    # 言語ファイルがない場合、デフォルト（英語）を使用
+    LANG_CODE="en"
+    [ -f "${script_dir}/lang/en.sh" ] && source "${script_dir}/lang/en.sh"
+  fi
+  
+  # どの言語ファイルも読み込めなかった場合は、インラインで定義されたメッセージを使用
+  if [ -z "$MSG_TITLE" ]; then
+    define_default_messages
+  fi
+}
+
+# デフォルトメッセージ定義（言語ファイルが読み込めない場合のフォールバック）
+define_default_messages() {
+  # 日本語をデフォルトとして定義
+  MSG_TITLE="画像選択ツール"
+  MSG_SEARCHING="検索中"
+  MSG_FILES_FOUND="ファイルが見つかりました"
+  MSG_SELECT_SDCARD="SDカードを選択 (↑/↓, Enter)"
+  MSG_SELECTED_SDCARD="選択されたSDカード"
+  MSG_SEARCHING_JPEGS="JPEGファイルを検索中..."
+  MSG_SEARCH_FILES="検索ファイル数"
+  MSG_NO_JPEG_FILES="JPEGファイルがありません"
+  MSG_TOTAL_JPEGS="合計 %d 個のJPEGファイル"
+  MSG_COLLECTING_DATES="日付を集計中"
+  MSG_DATES_FOUND="以下の日付が見つかりました (↑/↓, Enter):"
+  MSG_SELECTED_DATE="選択された日付"
+  MSG_ALL_DATES="すべて"
+  MSG_SORTING_FILES="ファイル名でソート中..."
+  MSG_FILTERED_FILES="絞り込まれたファイル数"
+  MSG_PRESS_ANY_KEY="続行するにはキーを押してください..."
+  MSG_EXPOSURE="露出"
+  MSG_DNG="DNG"
+  MSG_DNG_NONE="なし"
+  MSG_DNG_TOOL_UNAVAILABLE="ツール不可"
+  MSG_DNG_NO_TOOL="ツールなし"
+  MSG_P3_SUPPORT="P3対応"
+  MSG_PROGRESS="進捗"
+  MSG_LIKE="Like"
+  MSG_EXPOSURE_ADJ="露出調整"
+  MSG_PREV_NEXT="前/次"
+  MSG_EXIT="終了"
+  MSG_SELECTION_RESULTS="選別結果:"
+  MSG_LIKED_JPEGS="LikeされたJPEG: %d 個"
+  MSG_TAGGED_DNGS="タグ付与済みDNG: %d 個"
+  MSG_TAGGED_DNG_FILES="タグ付けされたDNGファイル: %d 個"
+  MSG_SELECT_ACTION="選択してください (↑/↓, Enter):"
+  MSG_MOVE_DNGS="DNGファイルを移動する"
+  MSG_DONT_MOVE="移動しない"
+  MSG_SELECT_DEST="移動先フォルダを選択してください (↑/↓, Enter):"
+  MSG_CHECKED_FOLDER="チェック済みフォルダ"
+  MSG_SELECTED_PHOTOS="選択写真"
+  MSG_ENTER_NEW_FOLDER="新しいフォルダ名を入力"
+  MSG_INPUT_FOLDER_NAME="新しいフォルダ名を入力してください："
+  MSG_MOVING_FILES="DNGファイルを移動しています..."
+  MSG_MOVED_FILES="%d 個のDNGファイルを「%s」に移動しました。"
+  MSG_DNG_TAGGED="DNGにタグ付与: %s"
+  MSG_NO_CORRESPONDING_DNG="対応DNGなしですが Like しました"
+  MSG_IMG_NOT_FOUND="画像ファイルが見つかりません: %s"
+  
+  # ImageMagick関連
+  MSG_IMAGEMAGICK_DETECTED="ImageMagick を検出しました。露出調整に使用します。"
+  MSG_IMAGEMAGICK_NOT_FOUND="ImageMagick が見つかりません。sips を使用します。"
+  MSG_IMAGEMAGICK_RECOMMEND="より良い露出調整のために ImageMagick のインストールをお勧めします。"
+  MSG_IMAGEMAGICK_INSTALL="インストール方法: brew install imagemagick"
+  
+  # DNG処理関連
+  MSG_DARKTABLE_DETECTED="darktable-cli を検出しました。DNG処理に使用します。"
+  MSG_RAWTHERAPEE_DETECTED="rawtherapee-cli を検出しました。DNG処理に使用します。"
+  MSG_DCRAW_DETECTED="dcraw を検出しました。DNG処理に使用します。"
+  MSG_DCRAW_WORKING="dcrawは正常に動作しています。"
+  MSG_DCRAW_NOT_WORKING="警告: dcrawが正常に動作しないようです。他のツールを使用します。"
+  MSG_DNG_TOOL_NOT_FOUND="DNG処理ツールが見つかりません。JPEGを使用した露出調整に戻します。"
+  MSG_DNG_TOOL_RECOMMEND="より高品質な処理のために darktable または rawtherapee のインストールをお勧めします。"
+  MSG_DNG_TOOL_INSTALL="インストール方法: brew install darktable"
+  
+  # エラーメッセージ
+  MSG_ERROR="エラー"
+  MSG_WARNING="警告"
+  MSG_TERMINAL_SIZE_ERROR="エラー: ターミナルサイズが小さすぎます(24x80以上推奨)"
+  MSG_SEARCHING_SDCARD="利用可能なSDカードを探しています..."
+  MSG_NO_VOLUMES_DIR="/Volumes ディレクトリがありません"
+  MSG_NO_VOLUMES="利用可能なボリュームがありません"
+  MSG_NO_SDCARD="SDカードが見つかりません"
+  MSG_ITERM_ERROR="エラー: iTerm2 か imgcat コマンドが使えません。"
+}
+
 # 表示設定 (必要に応じて環境に合わせて調整)
 TITLE_BAR_HEIGHT=30   # タイトルバー等のピクセル高（小さくして実質的な表示領域を広げる）
 LINE_HEIGHT_PX=18     # 1行あたりの高さ（ピクセル）（小さくして実質的な行数を増やす）
@@ -36,9 +186,11 @@ exposure_dir=""
 USE_P3_COLORSPACE=1   # P3色域対応（1=有効、0=無効）
 P3_PROFILE="/System/Library/ColorSync/Profiles/Display P3.icc"  # P3プロファイルのパス
 
+# スクリプトのディレクトリパスを設定
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 temp_dir="${script_dir}/temp_images"
 mkdir -p "$temp_dir"
+mkdir -p "${script_dir}/lang"
 
 # バックグラウンドプリロード用PID配列
 declare -a bg_pids=()
@@ -69,13 +221,13 @@ check_imagemagick() {
   IMAGEMAGICK_CHECKED=1
   
   if command -v convert >/dev/null 2>&1; then
-    echo "ImageMagick を検出しました。露出調整に使用します。"
+    echo -e "${MSG_IMAGEMAGICK_DETECTED}"
     USE_IMAGEMAGICK=1
     return 0
   else
-    echo "ImageMagick が見つかりません。sips を使用します。"
-    echo "より良い露出調整のために ImageMagick のインストールをお勧めします。"
-    echo "インストール方法: brew install imagemagick"
+    echo -e "${MSG_IMAGEMAGICK_NOT_FOUND}"
+    echo -e "${MSG_IMAGEMAGICK_RECOMMEND}"
+    echo -e "${MSG_IMAGEMAGICK_INSTALL}"
     USE_IMAGEMAGICK=0
     return 1
   fi
@@ -89,35 +241,35 @@ check_dng_processor() {
   
   # darktableのチェック
   if command -v darktable-cli >/dev/null 2>&1; then
-    echo "darktable-cli を検出しました。DNG処理に使用します。"
+    echo -e "${MSG_DARKTABLE_DETECTED}"
     DNG_PROCESSOR="darktable"
     return 0
   fi
   
   # rawtherapeeのチェック
   if command -v rawtherapee-cli >/dev/null 2>&1; then
-    echo "rawtherapee-cli を検出しました。DNG処理に使用します。"
+    echo -e "${MSG_RAWTHERAPEE_DETECTED}"
     DNG_PROCESSOR="rawtherapee"
     return 0
   fi
   
   # dcrawのチェック
   if command -v dcraw >/dev/null 2>&1; then
-    echo "dcraw を検出しました。DNG処理に使用します。"
+    echo -e "${MSG_DCRAW_DETECTED}"
     
     # dcrawが正常に動作するか簡易テスト
     if timeout 5 dcraw -v >/dev/null 2>&1; then
-      echo "dcrawは正常に動作しています。"
+      echo -e "${MSG_DCRAW_WORKING}"
       DNG_PROCESSOR="dcraw"
       return 0
     else
-      echo "警告: dcrawが正常に動作しないようです。他のツールを使用します。"
+      echo -e "${MSG_DCRAW_NOT_WORKING}"
     fi
   fi
   
-  echo "DNG処理ツールが見つかりません。JPEGを使用した露出調整に戻します。"
-  echo "より高品質な処理のために darktable または rawtherapee のインストールをお勧めします。"
-  echo "インストール方法: brew install darktable"
+  echo -e "${MSG_DNG_TOOL_NOT_FOUND}"
+  echo -e "${MSG_DNG_TOOL_RECOMMEND}"
+  echo -e "${MSG_DNG_TOOL_INSTALL}"
   DNG_PROCESSOR="none"
   return 1
 }
@@ -559,13 +711,13 @@ display_image() {
   echo -e "${YELLOW}📷${RESET} ${like_mark}${file_name_display} ${YELLOW}🔢 $((current_index + 1))/${total_files}${RESET} ${YELLOW}📅${RESET} ${date_str}"
 
   # 2行目：露出調整とDNG処理情報
-  local exposure_str="⚡ 露出:0"
+  local exposure_str="${MSG_EXPOSURE}:0"
   if [ $current_exposure -gt 0 ]; then
-    exposure_str="${GREEN}⚡ 露出:+${current_exposure}${RESET}"
+    exposure_str="${GREEN}${MSG_EXPOSURE}:+${current_exposure}${RESET}"
   elif [ $current_exposure -lt 0 ]; then
-    exposure_str="${PINK}⚡ 露出:${current_exposure}${RESET}"
+    exposure_str="${PINK}${MSG_EXPOSURE}:${current_exposure}${RESET}"
   else
-    exposure_str="⚡ 露出:0"
+    exposure_str="${MSG_EXPOSURE}:0"
   fi
 
   # DNG処理状態
@@ -574,20 +726,20 @@ display_image() {
     if [ -n "$DNG_PROCESSOR" ] && [ "$DNG_PROCESSOR" != "none" ]; then
       local dng_file=$(find_corresponding_dng "$jpeg")
       if [ -n "$dng_file" ]; then
-        dng_str="${GREEN}🖼️ DNG:$DNG_PROCESSOR${RESET}"
+        dng_str="${GREEN}🖼️ ${MSG_DNG}:$DNG_PROCESSOR${RESET}"
       else
-        dng_str="${PINK}🖼️ DNG:なし${RESET}"
+        dng_str="${PINK}🖼️ ${MSG_DNG}:${MSG_DNG_NONE}${RESET}"
       fi
     elif [ "$DNG_PROCESSOR" = "none" ]; then
-      dng_str="${PINK}🖼️ DNG:ツール不可${RESET}"
+      dng_str="${PINK}🖼️ ${MSG_DNG}:${MSG_DNG_TOOL_UNAVAILABLE}${RESET}"
     else
-      dng_str="${PINK}🖼️ DNG:ツールなし${RESET}"
+      dng_str="${PINK}🖼️ ${MSG_DNG}:${MSG_DNG_NO_TOOL}${RESET}"
     fi
   fi
 
   # P3色域情報
   local p3_str=""
-  [ "$USE_P3_COLORSPACE" -eq 1 ] && [ -f "$P3_PROFILE" ] && p3_str="${GREEN}🌈 P3対応${RESET}"
+  [ "$USE_P3_COLORSPACE" -eq 1 ] && [ -f "$P3_PROFILE" ] && p3_str="${GREEN}🌈 ${MSG_P3_SUPPORT}${RESET}"
 
   # 2行目を表示
   echo -e "${exposure_str}  ${dng_str}  ${p3_str}"
@@ -750,13 +902,13 @@ display_image() {
       progress_bar+="─"
     fi
   done
-  echo -en "${YELLOW}進捗:${RESET} [${progress_bar}] $((current_index + 1)) / $total_files"
+  echo -en "${YELLOW}${MSG_PROGRESS}:${RESET} [${progress_bar}] $((current_index + 1)) / $total_files"
   
   # 改行を明示的に制御
   tput cup "$((goto_line+1))" 0
 
   # 操作ガイド (2行目)
-  echo -en "${GREEN}Enter${RESET}: Like  ${GREEN}←/→${RESET}: 露出調整  ${GREEN}↑/↓${RESET}: 前/次  ${YELLOW}q${RESET}: 終了"
+  echo -en "${GREEN}Enter${RESET}: ${MSG_LIKE}  ${GREEN}←/→${RESET}: ${MSG_EXPOSURE_ADJ}  ${GREEN}↑/↓${RESET}: ${MSG_PREV_NEXT}  ${YELLOW}q${RESET}: ${MSG_EXIT}"
 
   # 3行目は空行でもOK
   tput cup "$((goto_line+2))" 0
@@ -772,203 +924,28 @@ display_image() {
 
 # iTerm2+imgcatチェック (省略可)
 if [ "${TERM_PROGRAM:-}" != "iTerm.app" ] || ! command -v imgcat >/dev/null 2>&1; then
-  echo "エラー: iTerm2 か imgcat コマンドが使えません。"
+  echo -e "${MSG_ITERM_ERROR}"
   exit 1
 fi
 
 # ターミナルサイズチェック
 if [ "$(tput lines)" -lt 24 ] || [ "$(tput cols)" -lt 80 ]; then
-  echo "エラー: ターミナルサイズが小さすぎます(24x80以上推奨)"
+  echo -e "${MSG_TERMINAL_SIZE_ERROR}"
   exit 1
 fi
 
-clear
-echo "利用可能なSDカードを探しています..."
-if [ ! -d "/Volumes" ]; then
-  echo "/Volumes ディレクトリがありません"
-  exit 1
-fi
-
-volumes=(/Volumes/*)
-[ ${#volumes[@]} -eq 0 ] && { echo "利用可能なボリュームがありません"; exit 1; }
-
-volume_options=()
-for vol in "${volumes[@]}"; do
-  [ -d "$vol" ] && volume_options+=("$vol")
-done
-
-[ ${#volume_options[@]} -eq 0 ] && { echo "SDカードが見つかりません"; exit 1; }
-
-echo "SDカードを選択 (↑/↓, Enter)"
-selected=0
-
-display_volume_options() {
-  for i in "${!volume_options[@]}"; do
-    if [ $i -eq $selected ]; then
-      echo -e "${HIGHLIGHT}> ${volume_options[$i]}${RESET}"
-    else
-      echo "  ${volume_options[$i]}"
-    fi
-  done
+# 前準備
+prepare() {
+  # script_dirを設定
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  temp_dir="${script_dir}/temp_images"
+  mkdir -p "$temp_dir"
+  mkdir -p "${script_dir}/lang"
+  
+  # 言語設定を適用
+  apply_language_settings
 }
 
-display_volume_options
-while true; do
-  read -rsn1 key
-  if [[ $key == "" ]]; then
-    sdcard="${volume_options[$selected]}"
-    break
-  elif [[ $key == $'\e' ]]; then
-    read -rsn2 k2
-    case "$k2" in
-      "[A")
-        [ $selected -gt 0 ] && ((selected--))
-        clear; echo "SDカードを選択 (↑/↓, Enter)"
-        display_volume_options
-        ;;
-      "[B")
-        [ $selected -lt $((${#volume_options[@]} - 1)) ] && ((selected++))
-        clear; echo "SDカードを選択 (↑/↓, Enter)"
-        display_volume_options
-        ;;
-    esac
-  fi
-done
-
-clear
-echo "選択されたSDカード: $sdcard"
-echo ""
-echo "JPEGファイルを検索中..."
-
-temp_files=$(mktemp)
-echo -n "検索中"
-find "$sdcard" -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) -not -name "._*" -not -path "*/\.*" > "$temp_files" 2>/dev/null &
-pid=$!
-while kill -0 $pid 2>/dev/null; do
-  echo -n "."
-  sleep 0.3
-done
-echo ""
-
-file_count=$(wc -l < "$temp_files")
-echo "検索ファイル数: $file_count"
-
-all_jpeg_files=()
-while IFS= read -r f; do
-  all_jpeg_files+=("$f")
-done < "$temp_files"
-rm "$temp_files"
-
-[ ${#all_jpeg_files[@]} -eq 0 ] && { echo "JPEGファイルがありません"; exit 1; }
-
-echo "合計 ${#all_jpeg_files[@]} 個のJPEGファイル"
-
-# 日付で絞り込み
-echo ""
-echo -n "日付を集計中"
-dates_list=()
-file_paths=()
-file_dates=()
-i=0
-total=${#all_jpeg_files[@]}
-for jpeg in "${all_jpeg_files[@]}"; do
-  ((i%100==0)) && echo -n "."
-  file_date=$(stat -f "%Sm" -t "%Y-%m-%d" "$jpeg")
-  dates_list+=("$file_date")
-  file_paths[$i]="$jpeg"
-  file_dates[$i]="$file_date"
-  ((i++))
-done
-echo ""
-
-temp_dates=$(mktemp)
-printf "%s\n" "${dates_list[@]}" | sort -r -u > "$temp_dates"
-date_options=()
-while IFS= read -r line; do
-  date_options+=("$line")
-done < "$temp_dates"
-rm "$temp_dates"
-
-# "すべて" を追加
-date_options+=("すべて")
-
-clear
-echo "以下の日付が見つかりました (↑/↓, Enter):"
-selected=0
-
-display_date_options() {
-  for i in "${!date_options[@]}"; do
-    if [ $i -eq $selected ]; then
-      echo -e "${HIGHLIGHT}> ${date_options[$i]}${RESET}"
-    else
-      echo "  ${date_options[$i]}"
-    fi
-  done
-}
-
-display_date_options
-while true; do
-  read -rsn1 key
-  if [[ $key == "" ]]; then
-    chosen_date="${date_options[$selected]}"
-    break
-  elif [[ $key == $'\e' ]]; then
-    read -rsn2 k2
-    case "$k2" in
-      "[A")
-        [ $selected -gt 0 ] && ((selected--))
-        clear; echo "以下の日付が見つかりました (↑/↓, Enter):"
-        display_date_options
-        ;;
-      "[B")
-        [ $selected -lt $((${#date_options[@]} - 1)) ] && ((selected++))
-        clear; echo "以下の日付が見つかりました (↑/↓, Enter):"
-        display_date_options
-        ;;
-    esac
-  fi
-done
-
-clear
-echo "選択された日付: $chosen_date"
-echo ""
-
-# 絞り込み
-selected_files=()
-if [ "$chosen_date" = "すべて" ]; then
-  selected_files=("${all_jpeg_files[@]}")
-else
-  for idx in "${!file_paths[@]}"; do
-    if [ "${file_dates[$idx]}" = "$chosen_date" ]; then
-      selected_files+=("${file_paths[$idx]}")
-    fi
-  done
-fi
-
-echo "ファイル名でソート中..."
-sorted_files=()
-tmp_s=$(mktemp)
-for f in "${selected_files[@]}"; do
-  echo "$(basename "$f")|$f" >> "$tmp_s"
-done
-sort "$tmp_s" | cut -d'|' -f2 > "${tmp_s}.sorted"
-while IFS= read -r line; do
-  sorted_files+=("$line")
-done < "${tmp_s}.sorted"
-rm -f "$tmp_s" "${tmp_s}.sorted"
-
-total_files=${#sorted_files[@]}
-echo "絞り込まれたファイル数: $total_files"
-echo ""
-read -n1 -rsp $'続行するにはキーを押してください...\n'
-
-tput civis  # カーソル非表示
-
-current_index=0
-LIKED_FILES=()
-TAGGED_DNGS=()
-
-# メイン処理
 main() {
   # トラップ設定
   trap cleanup EXIT
@@ -985,6 +962,192 @@ main() {
   if [ $USE_DNG_FOR_EXPOSURE -eq 1 ]; then
     check_dng_processor
   fi
+  
+  clear
+  echo -e "${MSG_SEARCHING_SDCARD}"
+  if [ ! -d "/Volumes" ]; then
+    echo -e "${MSG_NO_VOLUMES_DIR}"
+    exit 1
+  fi
+  
+  volumes=(/Volumes/*)
+  [ ${#volumes[@]} -eq 0 ] && { echo -e "${MSG_NO_VOLUMES}"; exit 1; }
+  
+  volume_options=()
+  for vol in "${volumes[@]}"; do
+    [ -d "$vol" ] && volume_options+=("$vol")
+  done
+  
+  [ ${#volume_options[@]} -eq 0 ] && { echo -e "${MSG_NO_SDCARD}"; exit 1; }
+  
+  echo -e "${MSG_SELECT_SDCARD}"
+  selected=0
+  
+  display_volume_options() {
+    for i in "${!volume_options[@]}"; do
+      if [ $i -eq $selected ]; then
+        echo -e "${HIGHLIGHT}> ${volume_options[$i]}${RESET}"
+      else
+        echo "  ${volume_options[$i]}"
+      fi
+    done
+  }
+  
+  display_volume_options
+  while true; do
+    read -rsn1 key
+    if [[ $key == "" ]]; then
+      sdcard="${volume_options[$selected]}"
+      break
+    elif [[ $key == $'\e' ]]; then
+      read -rsn2 k2
+      case "$k2" in
+        "[A")
+          [ $selected -gt 0 ] && ((selected--))
+          clear; echo -e "${MSG_SELECT_SDCARD}"
+          display_volume_options
+          ;;
+        "[B")
+          [ $selected -lt $((${#volume_options[@]} - 1)) ] && ((selected++))
+          clear; echo -e "${MSG_SELECT_SDCARD}"
+          display_volume_options
+          ;;
+      esac
+    fi
+  done
+  
+  clear
+  echo -e "${MSG_SELECTED_SDCARD}: $sdcard"
+  echo ""
+  echo -e "${MSG_SEARCHING_JPEGS}"
+  
+  temp_files=$(mktemp)
+  echo -n "${MSG_SEARCHING}"
+  find "$sdcard" -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) -not -name "._*" -not -path "*/\.*" > "$temp_files" 2>/dev/null &
+  pid=$!
+  while kill -0 $pid 2>/dev/null; do
+    echo -n "."
+    sleep 0.3
+  done
+  echo ""
+  
+  file_count=$(wc -l < "$temp_files")
+  echo "${MSG_SEARCH_FILES}: $file_count"
+  
+  all_jpeg_files=()
+  while IFS= read -r f; do
+    all_jpeg_files+=("$f")
+  done < "$temp_files"
+  rm "$temp_files"
+  
+  [ ${#all_jpeg_files[@]} -eq 0 ] && { echo -e "${MSG_NO_JPEG_FILES}"; exit 1; }
+  
+  printf "${MSG_TOTAL_JPEGS}\n" "${#all_jpeg_files[@]}"
+  
+  # 日付で絞り込み
+  echo ""
+  echo -n "${MSG_COLLECTING_DATES}"
+  dates_list=()
+  file_paths=()
+  file_dates=()
+  i=0
+  total=${#all_jpeg_files[@]}
+  for jpeg in "${all_jpeg_files[@]}"; do
+    ((i%100==0)) && echo -n "."
+    file_date=$(stat -f "%Sm" -t "%Y-%m-%d" "$jpeg")
+    dates_list+=("$file_date")
+    file_paths[$i]="$jpeg"
+    file_dates[$i]="$file_date"
+    ((i++))
+  done
+  echo ""
+  
+  temp_dates=$(mktemp)
+  printf "%s\n" "${dates_list[@]}" | sort -r -u > "$temp_dates"
+  date_options=()
+  while IFS= read -r line; do
+    date_options+=("$line")
+  done < "$temp_dates"
+  rm "$temp_dates"
+  
+  # "すべて" を追加
+  date_options+=("${MSG_ALL_DATES}")
+  
+  clear
+  echo -e "${MSG_DATES_FOUND}"
+  selected=0
+  
+  display_date_options() {
+    for i in "${!date_options[@]}"; do
+      if [ $i -eq $selected ]; then
+        echo -e "${HIGHLIGHT}> ${date_options[$i]}${RESET}"
+      else
+        echo "  ${date_options[$i]}"
+      fi
+    done
+  }
+  
+  display_date_options
+  while true; do
+    read -rsn1 key
+    if [[ $key == "" ]]; then
+      chosen_date="${date_options[$selected]}"
+      break
+    elif [[ $key == $'\e' ]]; then
+      read -rsn2 k2
+      case "$k2" in
+        "[A")
+          [ $selected -gt 0 ] && ((selected--))
+          clear; echo -e "${MSG_DATES_FOUND}"
+          display_date_options
+          ;;
+        "[B")
+          [ $selected -lt $((${#date_options[@]} - 1)) ] && ((selected++))
+          clear; echo -e "${MSG_DATES_FOUND}"
+          display_date_options
+          ;;
+      esac
+    fi
+  done
+  
+  clear
+  echo -e "${MSG_SELECTED_DATE}: $chosen_date"
+  echo ""
+  
+  # 絞り込み
+  selected_files=()
+  if [ "$chosen_date" = "${MSG_ALL_DATES}" ]; then
+    selected_files=("${all_jpeg_files[@]}")
+  else
+    for idx in "${!file_paths[@]}"; do
+      if [ "${file_dates[$idx]}" = "$chosen_date" ]; then
+        selected_files+=("${file_paths[$idx]}")
+      fi
+    done
+  fi
+  
+  echo -e "${MSG_SORTING_FILES}"
+  sorted_files=()
+  tmp_s=$(mktemp)
+  for f in "${selected_files[@]}"; do
+    echo "$(basename "$f")|$f" >> "$tmp_s"
+  done
+  sort "$tmp_s" | cut -d'|' -f2 > "${tmp_s}.sorted"
+  while IFS= read -r line; do
+    sorted_files+=("$line")
+  done < "${tmp_s}.sorted"
+  rm -f "$tmp_s" "${tmp_s}.sorted"
+  
+  total_files=${#sorted_files[@]}
+  echo -e "${MSG_FILTERED_FILES}: $total_files"
+  echo ""
+  read -n1 -rsp "${MSG_PRESS_ANY_KEY}"
+  
+  tput civis  # カーソル非表示
+  
+  current_index=0
+  LIKED_FILES=()
+  TAGGED_DNGS=()
   
   # 画像インデックスの準備
   if [ $total_files -gt 0 ]; then
@@ -1007,8 +1170,6 @@ main() {
       # DNGタグ付け
       base="${jpeg%.*}"
       dng=$(find_corresponding_dng "$jpeg")
-      echo "DEBUG: JPEG=$jpeg"
-      echo "DEBUG: base=$base"
       
       if [ -n "$dng" ]; then
         if command -v tag >/dev/null 2>&1; then
@@ -1017,11 +1178,11 @@ main() {
           xattr -w com.apple.metadata:_kMDItemUserTags '(Yellow)' "$dng"
         fi
         TAGGED_DNGS+=("$dng")
-        echo -e "${PINK}DNGにタグ付与: $(basename "$dng")${RESET}"
+        printf "${PINK}${MSG_DNG_TAGGED}${RESET}\n" "$(basename "$dng")"
         # メッセージ表示後に行をクリア
         tput el
       else
-        echo -e "${PINK}対応DNGなしですが Like しました${RESET}"
+        echo -e "${PINK}${MSG_NO_CORRESPONDING_DNG}${RESET}"
         # メッセージ表示後に行をクリア
         tput el
       fi
@@ -1078,18 +1239,18 @@ main() {
   done
 
   clear
-  echo "選別結果:"
-  echo "LikeされたJPEG: ${#LIKED_FILES[@]} 個"
-  echo "タグ付与済みDNG: ${#TAGGED_DNGS[@]} 個"
+  echo -e "${MSG_SELECTION_RESULTS}"
+  printf "${MSG_LIKED_JPEGS}\n" "${#LIKED_FILES[@]}"
+  printf "${MSG_TAGGED_DNGS}\n" "${#TAGGED_DNGS[@]}"
 
   if [ ${#TAGGED_DNGS[@]} -gt 0 ]; then
     clear
-    echo "タグ付けされたDNGファイル: ${#TAGGED_DNGS[@]} 個"
+    printf "${MSG_TAGGED_DNG_FILES}\n" "${#TAGGED_DNGS[@]}"
     echo ""
-    echo "選択してください (↑/↓, Enter):"
+    echo -e "${MSG_SELECT_ACTION}"
     
     # 選択肢を配列に格納
-    move_options=("DNGファイルを移動する" "移動しない")
+    move_options=("${MSG_MOVE_DNGS}" "${MSG_DONT_MOVE}")
     selected=0
     
     display_move_options() {
@@ -1114,17 +1275,17 @@ main() {
           "[A")  # 上キー
             [ $selected -gt 0 ] && ((selected--))
             clear
-            echo "タグ付けされたDNGファイル: ${#TAGGED_DNGS[@]} 個"
+            printf "${MSG_TAGGED_DNG_FILES}\n" "${#TAGGED_DNGS[@]}"
             echo ""
-            echo "選択してください (↑/↓, Enter):"
+            echo -e "${MSG_SELECT_ACTION}"
             display_move_options
             ;;
           "[B")  # 下キー
             [ $selected -lt $((${#move_options[@]} - 1)) ] && ((selected++))
             clear
-            echo "タグ付けされたDNGファイル: ${#TAGGED_DNGS[@]} 個" 
+            printf "${MSG_TAGGED_DNG_FILES}\n" "${#TAGGED_DNGS[@]}"
             echo ""
-            echo "選択してください (↑/↓, Enter):"
+            echo -e "${MSG_SELECT_ACTION}"
             display_move_options
             ;;
         esac
@@ -1132,12 +1293,12 @@ main() {
     done
     
     # 選択に基づいて処理
-    if [ "$chosen_option" = "DNGファイルを移動する" ]; then
+    if [ "$chosen_option" = "${MSG_MOVE_DNGS}" ]; then
       clear
-      echo "移動先フォルダを選択してください (↑/↓, Enter):"
+      echo -e "${MSG_SELECT_DEST}"
       
       # 移動先オプションを配列に格納
-      dest_options=("$sdcard/チェック済みフォルダ" "$sdcard/選択写真" "新しいフォルダ名を入力")
+      dest_options=("$sdcard/${MSG_CHECKED_FOLDER}" "$sdcard/${MSG_SELECTED_PHOTOS}" "${MSG_ENTER_NEW_FOLDER}")
       selected=0
       
       display_dest_options() {
@@ -1162,24 +1323,25 @@ main() {
             "[A")  # 上キー
               [ $selected -gt 0 ] && ((selected--))
               clear
-              echo "移動先フォルダを選択してください (↑/↓, Enter):"
+              echo -e "${MSG_SELECT_DEST}"
               display_dest_options
               ;;
             "[B")  # 下キー
               [ $selected -lt $((${#dest_options[@]} - 1)) ] && ((selected++))
               clear
-              echo "移動先フォルダを選択してください (↑/↓, Enter):"
+              echo -e "${MSG_SELECT_DEST}"
               display_dest_options
               ;;
           esac
         fi
       done
       
+      
       # 移動先フォルダの処理
       dest_folder=""
-      if [ "$chosen_dest" = "新しいフォルダ名を入力" ]; then
+      if [ "$chosen_dest" = "${MSG_ENTER_NEW_FOLDER}" ]; then
         clear
-        echo "新しいフォルダ名を入力してください："
+        echo -e "${MSG_INPUT_FOLDER_NAME}"
         tput cnorm  # カーソル表示
         read -r folder_name
         tput civis  # カーソル非表示
@@ -1192,7 +1354,7 @@ main() {
       mkdir -p "$dest_folder"
       local moved=0
       clear
-      echo "DNGファイルを移動しています..."
+      echo -e "${MSG_MOVING_FILES}"
       for d in "${TAGGED_DNGS[@]}"; do
         if [ -f "$d" ]; then
           mv "$d" "$dest_folder/" && ((moved++))
@@ -1200,7 +1362,7 @@ main() {
         fi
       done
       echo ""
-      echo "$moved 個のDNGファイルを「$(basename "$dest_folder")」に移動しました。"
+      printf "${MSG_MOVED_FILES}\n" "$moved" "$(basename "$dest_folder")"
       sleep 1
     fi
   fi
@@ -1495,4 +1657,10 @@ EOF
   fi
 }
 
+# メイン処理の実行
+
+# コマンドライン引数を解析
+parse_arguments "$@"
+
+# メイン処理を実行
 main

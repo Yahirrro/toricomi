@@ -1,149 +1,202 @@
 # toricomi 📷
 
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README_ja.md">日本語</a> |
+  <a href="README_zh.md">中文</a> |
+  <a href="README_es.md">Español</a> |
+  <a href="README_fr.md">Français</a>
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-macOS-blue.svg)](https://www.apple.com/macos)
 [![Bash](https://img.shields.io/badge/made%20with-Bash-1f425f.svg)](https://www.gnu.org/software/bash/)
 
-> 写真家のためのシンプルで高速なSDカード選別ツール
+> A fast and simple SD card photo selection tool for photographers
 
 <p align="center">
   <img src="https://i.imgur.com/placeholder-image.png" alt="toricomi Demo" width="720">
 </p>
 
-## ✨ 特徴
+## ✨ Features
 
-- **シンプルなインターフェース** - ターミナル上で直感的に操作
-- **高速プレビュー** - バックグラウンドでの画像プリロードによる快適な閲覧体験
-- **露出調整** - その場で写真の明るさを調整
-- **RAWサポート** - DNG（RAW）ファイルへの自動タグ付けと処理
-- **P3色域対応** - より鮮やかな色表示（対応ディスプレイの場合）
-- **効率的なワークフロー** - 「Like」機能でお気に入り写真を素早く選別
+- **Simple Interface** - Intuitive operation in your terminal
+- **Fast Preview** - Smooth browsing experience with background image preloading
+- **Exposure Adjustment** - Adjust image brightness on the fly
+- **RAW Support** - Automatic tagging and processing of DNG (RAW) files
+- **P3 Color Space** - Enhanced color display on supported screens
+- **Efficient Workflow** - Quickly select favorite photos with the "Like" feature
 
-## 🚀 インストール
+## 🚀 Installation
 
-### 必須環境
+### Requirements
 
 - macOS
 - [iTerm2](https://iterm2.com/)
-- imgcat（iTerm2の画像表示コマンド）
+- imgcat (iTerm2's image display command)
 
-### クイックインストール
+### Quick Install
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone https://github.com/yahirrro/toricomi.git
 cd toricomi
 
-# スクリプトに実行権限を付与
+# Make the script executable
 chmod +x image_selector.sh
 
-# スクリプトを実行
+# Run the script
 ./image_selector.sh
 ```
 
-### 推奨インストール（高機能版）
+### Recommended Installation (Enhanced Version)
 
-より良い体験のために、以下のツールのインストールを推奨します：
+For a better experience, we recommend installing the following tools:
 
 ```bash
-# ImageMagickのインストール（高品質な露出調整用）
+# Install ImageMagick for high-quality exposure adjustments
 brew install imagemagick
 
-# DNGファイル処理用ツール（いずれか一つ）
-brew install darktable   # 推奨
-# または
+# Install a DNG processing tool (choose one)
+brew install darktable   # recommended
+# or
 brew install rawtherapee
-# または
+# or
 brew install dcraw
 ```
 
-## 📖 使い方
+## 📖 Usage
 
-1. SDカードをMacに接続
+1. Connect your SD card to your Mac
 
-2. スクリプトを実行
+2. Run the script
 
    ```bash
+   # Run with default language (Japanese)
    ./image_selector.sh
+
+   # Run with English interface
+   ./image_selector.sh -l en
+   # or
+   ./image_selector.sh --lang en
    ```
 
-3. 表示される指示に従って操作
-   - SDカードを選択
-   - 日付を選択（または「すべて」を選択）
-   - 写真を閲覧・選別
+3. Follow the on-screen instructions
+   - Select your SD card
+   - Choose a date (or "All")
+   - Browse and select photos
 
-### キー操作
+### Key Controls
 
-| キー      | 機能                       |
-| --------- | -------------------------- |
-| **↑/↓**   | 前/次の写真に移動          |
-| **←/→**   | 露出調整（暗く/明るく）    |
-| **Enter** | 写真を「Like」としてマーク |
-| **q**     | 終了                       |
+| Key       | Function                          |
+| --------- | --------------------------------- |
+| **↑/↓**   | Navigate to previous/next photo   |
+| **←/→**   | Adjust exposure (darker/brighter) |
+| **Enter** | Mark photo as "Like"              |
+| **q**     | Quit                              |
 
-## 🛠 機能詳細
+## 🛠 Detailed Features
 
-### 露出調整
+### Multilingual Support
 
-写真が暗すぎる/明るすぎる場合、←/→キーで露出を調整できます。ImageMagickがインストールされていると、より高品質な調整が可能です。
+The script supports multiple languages:
 
-### DNG（RAW）ファイル処理
+- Japanese (default)
+- English
 
-JPEGファイルに対応するDNGファイルが存在する場合、「Like」マークを付けると自動的にDNGファイルにもタグ付けされます。スクリプト終了時に、タグ付けされたDNGファイルを指定フォルダに移動することもできます。
-
-### P3色域対応
-
-P3色域対応ディスプレイをお使いの場合、より鮮やかな色表示が可能です。
-
-## ⚙️ カスタマイズ
-
-スクリプト内の以下の設定を変更することで、動作をカスタマイズできます：
+You can specify the language using the `-l` or `--lang` option:
 
 ```bash
-# 表示設定
-TITLE_BAR_HEIGHT=30   # タイトルバー等のピクセル高
-LINE_HEIGHT_PX=18     # 1行あたりの高さ（ピクセル）
-MAX_IMG_WIDTH=2000    # 画像の最大幅（ピクセル）
-
-# 表示倍率調整
-SIZE_FACTOR=2         # 表示サイズ倍率（1.0=そのまま、1.2=20%拡大）
-
-# 露出調整設定
-EXPOSURE_STEP=2       # 露出調整のステップ
-MAX_EXPOSURE=25       # 最大露出値
-MIN_EXPOSURE=-25      # 最小露出値
-
-# DNG処理関連設定
-USE_DNG_FOR_EXPOSURE=1 # DNGファイルを使用した露出調整（1=有効、0=無効）
+# Run with English interface
+./image_selector.sh -l en
 ```
 
-## 🔍 トラブルシューティング
+The system automatically loads language files from the `lang/` directory.
 
-| 問題                                                  | 解決策                                                                                          |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 「iTerm2 か imgcat コマンドが使えません」と表示される | iTerm2がインストールされていることを確認し、最新バージョンに更新してください                    |
-| 画像が表示されない                                    | ターミナルサイズが小さすぎないか確認してください（24x80以上推奨）                               |
-| DNG処理ができない                                     | 推奨ツール（darktable, rawtherapee, dcraw）のいずれかがインストールされているか確認してください |
-| 画像表示が遅い                                        | `SIZE_FACTOR`の値を小さくして試してください                                                     |
+### Exposure Adjustment
+
+When photos are too dark or too bright, you can adjust the exposure using the ←/→ keys. Better quality adjustments are available if ImageMagick is installed.
+
+### DNG (RAW) File Processing
+
+If a DNG file exists corresponding to a JPEG file, it will automatically be tagged when you mark the JPEG as "Like". At the end of the script, you can move tagged DNG files to a specified folder.
+
+### P3 Color Space Support
+
+If you have a P3 color space compatible display, you can enjoy more vibrant color display.
+
+## ⚙️ Customization
+
+You can customize the following parameters in the script:
+
+```bash
+# Display settings
+TITLE_BAR_HEIGHT=30   # Title bar height in pixels
+LINE_HEIGHT_PX=18     # Line height in pixels
+MAX_IMG_WIDTH=2000    # Maximum image width in pixels
+
+# Display scale
+SIZE_FACTOR=2         # Display size factor (1.0=original, 1.2=20% larger)
+
+# Exposure adjustment settings
+EXPOSURE_STEP=2       # Exposure adjustment step
+MAX_EXPOSURE=25       # Maximum exposure value
+MIN_EXPOSURE=-25      # Minimum exposure value
+
+# DNG processing settings
+USE_DNG_FOR_EXPOSURE=1 # Use DNG files for exposure adjustment (1=enabled, 0=disabled)
+```
+
+### Language Settings
+
+toricomi supports multiple languages. You can set your preferred language by setting the `TORICOMI_LANG` environment variable:
+
+```bash
+# Set language to English
+export TORICOMI_LANG=en
+
+# Set language to Japanese
+export TORICOMI_LANG=ja
+
+# Set language to Chinese
+export TORICOMI_LANG=zh
+
+# Set language to Spanish
+export TORICOMI_LANG=es
+
+# Set language to French
+export TORICOMI_LANG=fr
+```
+
+If no language is specified, English will be used as the default.
+
+## 🔍 Troubleshooting
+
+| Issue                                       | Solution                                            |
+| ------------------------------------------- | --------------------------------------------------- |
+| "iTerm2 or imgcat command is not available" | Make sure iTerm2 is installed and up to date        |
+| Images appear too small                     | Increase the SIZE_FACTOR in the script              |
+| DNG files are not processed                 | Install darktable, rawtherapee, or dcraw            |
+| Terminal size error                         | Increase your terminal window size (at least 24x80) |
 
 ## 📝 TODO
 
-- [ ] ライブラリモード（複数のSDカードからの写真を一度に閲覧）
-- [ ] キーワードタグ付け機能
-- [ ] メタデータ表示の拡張（撮影設定、カメラ情報など）
-- [ ] 複数ディスプレイのサポート
+- [ ] Library mode (view photos from multiple SD cards at once)
+- [ ] Keyword tagging feature
+- [ ] Extended metadata display (shooting settings, camera information, etc.)
+- [ ] Multiple display support
 
-## 🤝 貢献
+## 🤝 Contributing
 
-貢献は大歓迎です！バグ報告、機能リクエスト、プルリクエストなど、どんな形でも構いません。
+Contributions are welcome! Feel free to submit bug reports, feature requests, or pull requests.
 
-## 👤 作者
+## 👤 Author
 
 - Yahiro Nakamoto ([@yahirrro](https://github.com/yahirrro))
 
-## 📄 ライセンス
+## 📄 License
 
-MITライセンスの下で公開されています。詳細は[LICENSE](LICENSE)ファイルをご覧ください。
+Released under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 

@@ -7,6 +7,45 @@
 # デバッグモード（1=有効、0=無効）
 DEBUG=0
 
+# likesフォルダ内のDNGファイルのベース名を保存する配列
+declare -a LIKES_DNG_FILES
+
+# likesフォルダ内のDNGファイルを検索し、配列に保存する関数
+scan_likes_folder() {
+  local sdcard="$1"
+  LIKES_DNG_FILES=()
+  
+  if [ -d "$sdcard/likes" ]; then
+    local likes_dir="$sdcard/likes"
+    [ "$DEBUG" -eq 1 ] && echo "likesフォルダをスキャン中: $likes_dir"
+    
+    # likesフォルダ内のDNGファイルを検索
+    while IFS= read -r dng_file; do
+      if [ -f "$dng_file" ]; then
+        # DNGファイルの拡張子を除いたベース名を取得
+        local base_name=$(basename "${dng_file%.*}")
+        LIKES_DNG_FILES+=("$base_name")
+        [ "$DEBUG" -eq 1 ] && echo "likes内のDNGを検出: $base_name"
+      fi
+    done < <(find "$likes_dir" -type f \( -iname "*.dng" -o -iname "*.DNG" \) 2>/dev/null)
+    
+    [ "$DEBUG" -eq 1 ] && echo "likes内のDNG検出数: ${#LIKES_DNG_FILES[@]}"
+  fi
+}
+
+# JPEGのベース名に対応するDNGがlikesフォルダ内にあるかチェックする関数
+is_dng_in_likes() {
+  local jpeg_base_name="$1"
+  
+  for likes_dng in "${LIKES_DNG_FILES[@]}"; do
+    if [[ "$jpeg_base_name" == "$likes_dng" ]]; then
+      return 0 # 見つかった場合は0を返す（成功）
+    fi
+  done
+  
+  return 1 # 見つからなかった場合は1を返す（失敗）
+}
+
 ##################################################
 # 多言語対応（国際化）設定
 ##################################################
@@ -699,6 +738,28 @@ display_image() {
     fi
   done
 
+  # likesフォルダ内のDNGを表示した場合、自動的にLIKE状態にする
+  if [ $is_liked -eq 0 ]; then
+    # 現在表示しているJPEGのファイル名（拡張子なし）
+    local base_name=$(basename "${jpeg%.*}")
+    
+    # 特定のファイル名の場合
+    if [ "$base_name" = "L1031363" ]; then
+      [ "$DEBUG" -eq 1 ] && echo "特定ファイル検出: L1031363.JPG"
+      # likesフォルダ内に対応するDNGがあるかチェック
+      if is_dng_in_likes "$base_name"; then
+        [ "$DEBUG" -eq 1 ] && echo "L1031363.DNGがlikesフォルダ内に存在します"
+        is_liked=1
+      fi
+    else
+      # その他の一般的なファイルの場合
+      if is_dng_in_likes "$base_name"; then
+        [ "$DEBUG" -eq 1 ] && echo "${base_name}.DNGがlikesフォルダ内に存在します"
+        is_liked=1
+      fi
+    fi
+  fi
+
   # --- 新しいヘッダー表示（コンパクト版） ---
   # 1行目：基本情報（ファイル名、インデックス、日付）
   local like_mark=""
@@ -1019,6 +1080,15 @@ main() {
   clear
   echo -e "${MSG_SELECTED_SDCARD}: $sdcard"
   echo ""
+  
+  # likesフォルダを自動的に作成
+  if [ ! -d "$sdcard/likes" ]; then
+    mkdir -p "$sdcard/likes"
+  fi
+  
+  # likesフォルダ内のDNGファイルを事前スキャン
+  scan_likes_folder "$sdcard"
+  
   echo -e "${MSG_SEARCHING_JPEGS}"
   
   temp_files=$(mktemp)
@@ -1297,8 +1367,8 @@ main() {
       clear
       echo -e "${MSG_SELECT_DEST}"
       
-      # 移動先オプションを配列に格納
-      dest_options=("$sdcard/${MSG_CHECKED_FOLDER}" "$sdcard/${MSG_SELECTED_PHOTOS}" "${MSG_ENTER_NEW_FOLDER}")
+      # 移動先オプションを配列に格納 - likesをデフォルトオプションとして最初に追加
+      dest_options=("$sdcard/likes" "$sdcard/${MSG_CHECKED_FOLDER}" "$sdcard/${MSG_SELECTED_PHOTOS}" "${MSG_ENTER_NEW_FOLDER}")
       selected=0
       
       display_dest_options() {

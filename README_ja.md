@@ -15,8 +15,10 @@
 > 写真家のためのシンプルで高速なSDカード選別ツール
 
 <p align="center">
-  <img src="https://i.imgur.com/placeholder-image.png" alt="toricomi デモ" width="720">
+  <img src="https://github.com/user-attachments/assets/dc831121-a91c-4a3f-8d13-7aa247bcb379" alt="toricomi デモ" width="720">
 </p>
+
+https://github.com/user-attachments/assets/6cc2a8b5-f5ac-441a-8ce1-3b20ac004181
 
 ## ✨ 特徴
 

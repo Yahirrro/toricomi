@@ -15,8 +15,10 @@
 > 为摄影师设计的快速简便的SD卡照片选择工具
 
 <p align="center">
-  <img src="https://i.imgur.com/placeholder-image.png" alt="toricomi 演示" width="720">
+  <img src="https://github.com/user-attachments/assets/dc831121-a91c-4a3f-8d13-7aa247bcb379" alt="toricomi 演示" width="720">
 </p>
+
+https://github.com/user-attachments/assets/6cc2a8b5-f5ac-441a-8ce1-3b20ac004181
 
 ## ✨ 特点
 

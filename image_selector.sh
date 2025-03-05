@@ -21,6 +21,10 @@ MAX_EXPOSURE=25       # 最大露出値
 MIN_EXPOSURE=-25      # 最小露出値
 current_exposure=0    # 現在の露出値
 
+# DNG処理関連設定
+USE_DNG_FOR_EXPOSURE=1   # DNGファイルを使用した露出調整（1=有効、0=無効）
+DNG_PROCESSOR=""         # 使用するDNG処理ツール ("darktable", "rawtherapee", "dcraw")
+
 # ImageMagick関連
 USE_IMAGEMAGICK=1     # ImageMagickを使用するか（1=有効、0=無効）
 IMAGEMAGICK_CHECKED=0 # ImageMagickのチェック済みフラグ
@@ -75,6 +79,47 @@ check_imagemagick() {
     USE_IMAGEMAGICK=0
     return 1
   fi
+}
+
+# DNG処理ツールの確認
+check_dng_processor() {
+  if [ -n "$DNG_PROCESSOR" ] && [ "$DNG_PROCESSOR" != "none" ]; then
+    return 0
+  fi
+  
+  # darktableのチェック
+  if command -v darktable-cli >/dev/null 2>&1; then
+    echo "darktable-cli を検出しました。DNG処理に使用します。"
+    DNG_PROCESSOR="darktable"
+    return 0
+  fi
+  
+  # rawtherapeeのチェック
+  if command -v rawtherapee-cli >/dev/null 2>&1; then
+    echo "rawtherapee-cli を検出しました。DNG処理に使用します。"
+    DNG_PROCESSOR="rawtherapee"
+    return 0
+  fi
+  
+  # dcrawのチェック
+  if command -v dcraw >/dev/null 2>&1; then
+    echo "dcraw を検出しました。DNG処理に使用します。"
+    
+    # dcrawが正常に動作するか簡易テスト
+    if timeout 5 dcraw -v >/dev/null 2>&1; then
+      echo "dcrawは正常に動作しています。"
+      DNG_PROCESSOR="dcraw"
+      return 0
+    else
+      echo "警告: dcrawが正常に動作しないようです。他のツールを使用します。"
+    fi
+  fi
+  
+  echo "DNG処理ツールが見つかりません。JPEGを使用した露出調整に戻します。"
+  echo "より高品質な処理のために darktable または rawtherapee のインストールをお勧めします。"
+  echo "インストール方法: brew install darktable"
+  DNG_PROCESSOR="none"
+  return 1
 }
 
 # ANSIカラー
@@ -397,27 +442,85 @@ apply_exposure_to_current() {
   # 露出調整した画像のパス
   local exposed_jpeg="${exposure_dir}/${current_exposure}_${base_name}"
   
-  # 露出調整済み画像がなければ作成
-  if [ ! -f "$exposed_jpeg" ]; then
+  # 対応するDNGファイルを探す
+  local dng_file=""
+  if [ $USE_DNG_FOR_EXPOSURE -eq 1 ] && [ "$DNG_PROCESSOR" != "none" ]; then
+    dng_file=$(find_corresponding_dng "$jpeg")
+  fi
+  
+  # 既に調整済み画像があればそれを使用
+  if [ -f "$exposed_jpeg" ]; then
+    # 次の露出値も事前に計算してバックグラウンドで準備
+    prepare_next_exposure_values
+    echo "$exposed_jpeg"
+    return 0
+  fi
+  
+  # DNG処理
+  if [ $USE_DNG_FOR_EXPOSURE -eq 1 ] && [ -n "$dng_file" ] && [ "$DNG_PROCESSOR" != "none" ]; then
+    [ "$DEBUG" -eq 1 ] && echo "DNG処理を試みます: $(basename "$dng_file")"
+    
+    # 露出値が0の場合は元の画像をそのまま使用
+    if [ "$current_exposure" -eq 0 ]; then
+      cp "$resized_jpeg" "$exposed_jpeg" 2>/dev/null
+    else
+      # DNG処理
+      process_dng_with_exposure "$dng_file" "$exposed_jpeg" "$current_exposure"
+      
+      # DNG処理が失敗した場合はJPEGで処理
+      if [ ! -f "$exposed_jpeg" ]; then
+        [ "$DEBUG" -eq 1 ] && echo "DNG処理失敗、JPEGで代替処理します"
+        adjust_exposure "$resized_jpeg" "$exposed_jpeg" "$current_exposure"
+      fi
+    fi
+  else
+    # DNGがない場合やDNG処理無効の場合はJPEGで処理
+    [ "$DEBUG" -eq 1 ] && echo "JPEG処理を使用します"
     adjust_exposure "$resized_jpeg" "$exposed_jpeg" "$current_exposure"
   fi
   
   # 次の露出値も事前に計算してバックグラウンドで準備
+  prepare_next_exposure_values
+  
+  # 露出調整済み画像のパスを返す
+  echo "$exposed_jpeg"
+}
+
+# 次の露出値を事前に準備
+prepare_next_exposure_values() {
+  local jpeg="${sorted_files[$current_index]}"
+  local base_name="$(basename "$jpeg")"
+  local resized_jpeg="${temp_dir}/$base_name"
   local next_exposure_plus=$((current_exposure + EXPOSURE_STEP))
   local next_exposure_minus=$((current_exposure - EXPOSURE_STEP))
   
+  # 対応するDNGファイルを探す
+  local dng_file=""
+  if [ $USE_DNG_FOR_EXPOSURE -eq 1 ] && [ "$DNG_PROCESSOR" != "none" ]; then
+    dng_file=$(find_corresponding_dng "$jpeg")
+  fi
+  
   if [ $next_exposure_plus -le $MAX_EXPOSURE ]; then
     local next_plus="${exposure_dir}/${next_exposure_plus}_${base_name}"
-    [ ! -f "$next_plus" ] && adjust_exposure "$resized_jpeg" "$next_plus" "$next_exposure_plus" "bg"
+    if [ ! -f "$next_plus" ]; then
+      if [ $USE_DNG_FOR_EXPOSURE -eq 1 ] && [ -n "$dng_file" ] && [ "$DNG_PROCESSOR" != "none" ]; then
+        process_dng_with_exposure "$dng_file" "$next_plus" "$next_exposure_plus" "bg"
+      else
+        adjust_exposure "$resized_jpeg" "$next_plus" "$next_exposure_plus" "bg"
+      fi
+    fi
   fi
   
   if [ $next_exposure_minus -ge $MIN_EXPOSURE ]; then
     local next_minus="${exposure_dir}/${next_exposure_minus}_${base_name}"
-    [ ! -f "$next_minus" ] && adjust_exposure "$resized_jpeg" "$next_minus" "$next_exposure_minus" "bg"
+    if [ ! -f "$next_minus" ]; then
+      if [ $USE_DNG_FOR_EXPOSURE -eq 1 ] && [ -n "$dng_file" ] && [ "$DNG_PROCESSOR" != "none" ]; then
+        process_dng_with_exposure "$dng_file" "$next_minus" "$next_exposure_minus" "bg"
+      else
+        adjust_exposure "$resized_jpeg" "$next_minus" "$next_exposure_minus" "bg"
+      fi
+    fi
   fi
-  
-  # 露出調整済み画像のパスを返す
-  echo "$exposed_jpeg"
 }
 
 ##################################################
@@ -444,34 +547,55 @@ display_image() {
     fi
   done
 
-  # LIKE済みの場合は💕マークを表示、そうでない場合は通常表示
+  # --- 新しいヘッダー表示（コンパクト版） ---
+  # 1行目：基本情報（ファイル名、インデックス、日付）
+  local like_mark=""
+  local file_name_display="${base_name}"
   if [[ $is_liked -eq 1 ]]; then
-    echo -e "${YELLOW}📷 ファイル: ${PINK}💕 ${base_name}${RESET}"       # 1行目
-  else
-    echo -e "${YELLOW}📷 ファイル: ${base_name}${RESET}"       # 1行目
+    like_mark="${PINK}💕 ${RESET}"
+    file_name_display="${PINK}\033[1m${base_name}${RESET}"
   fi
-  echo "インデックス: $((current_index + 1)) / $total_files"  # 2行目
-  
-  # P3色域対応情報を表示
-  if [ "$USE_P3_COLORSPACE" -eq 1 ] && [ -f "$P3_PROFILE" ]; then
-    echo -e "${GREEN}P3色域対応: 有効${RESET}"  # 3行目
-  else
-    echo -e "P3色域対応: 無効"  # 3行目
-  fi
-  
-  echo "日付: $(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$jpeg")" # 4行目
-  
-  # 露出値を表示 (5行目)
+  local date_str=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$jpeg")
+  echo -e "${YELLOW}📷${RESET} ${like_mark}${file_name_display} ${YELLOW}🔢 $((current_index + 1))/${total_files}${RESET} ${YELLOW}📅${RESET} ${date_str}"
+
+  # 2行目：露出調整とDNG処理情報
+  local exposure_str="⚡ 露出:0"
   if [ $current_exposure -gt 0 ]; then
-    echo -e "露出調整: ${GREEN}+${current_exposure}${RESET}"
+    exposure_str="${GREEN}⚡ 露出:+${current_exposure}${RESET}"
   elif [ $current_exposure -lt 0 ]; then
-    echo -e "露出調整: ${PINK}${current_exposure}${RESET}"
+    exposure_str="${PINK}⚡ 露出:${current_exposure}${RESET}"
   else
-    echo -e "露出調整: 0"
+    exposure_str="⚡ 露出:0"
   fi
-  
-  echo ""                                                   # 6行目
-  local header_lines=6
+
+  # DNG処理状態
+  local dng_str=""
+  if [ $USE_DNG_FOR_EXPOSURE -eq 1 ]; then
+    if [ -n "$DNG_PROCESSOR" ] && [ "$DNG_PROCESSOR" != "none" ]; then
+      local dng_file=$(find_corresponding_dng "$jpeg")
+      if [ -n "$dng_file" ]; then
+        dng_str="${GREEN}🖼️ DNG:$DNG_PROCESSOR${RESET}"
+      else
+        dng_str="${PINK}🖼️ DNG:なし${RESET}"
+      fi
+    elif [ "$DNG_PROCESSOR" = "none" ]; then
+      dng_str="${PINK}🖼️ DNG:ツール不可${RESET}"
+    else
+      dng_str="${PINK}🖼️ DNG:ツールなし${RESET}"
+    fi
+  fi
+
+  # P3色域情報
+  local p3_str=""
+  [ "$USE_P3_COLORSPACE" -eq 1 ] && [ -f "$P3_PROFILE" ] && p3_str="${GREEN}🌈 P3対応${RESET}"
+
+  # 2行目を表示
+  echo -e "${exposure_str}  ${dng_str}  ${p3_str}"
+
+  # ヘッダーの区切り線
+  echo -e "${YELLOW}$(printf '%*s' "$term_cols" | tr ' ' '=')${RESET}"
+
+  local header_lines=3  # ヘッダー行数が3行になった
 
   # --- 事前にリサイズ済みでなければ作る ---
   if [ ! -f "$resized_jpeg" ]; then
@@ -579,7 +703,20 @@ display_image() {
     # -H: 高さを指定 (ピクセル単位)
     # -r: アスペクト比を維持
     
+    # 画像を中央に表示するための計算と位置調整
+    local term_width=$(tput cols)
+    local char_width=8  # 平均的な文字幅（ピクセル）
+    local img_char_width=$(( display_width / char_width ))
+    local left_padding=$(( (term_width - img_char_width) / 2 ))
+    # 余白がマイナスになる場合は0にする
+    if [ $left_padding -lt 0 ]; then
+      left_padding=0
+    fi
+    # 現在の行の左端から余白分だけ移動
+    tput hpa $left_padding
+    
     [ "$DEBUG" -eq 1 ] && echo "imgcatコマンド実行: imgcat -p -W ${display_width}px -H ${display_height}px -r ${display_temp}"
+    [ "$DEBUG" -eq 1 ] && echo "中央表示: 文字幅換算=${img_char_width}, 左余白=${left_padding}"
     
     { 
       # サイズが十分大きい場合はオプションを調整
@@ -844,6 +981,11 @@ main() {
   # ImageMagickのチェック
   check_imagemagick
   
+  # DNG処理ツールのチェック
+  if [ $USE_DNG_FOR_EXPOSURE -eq 1 ]; then
+    check_dng_processor
+  fi
+  
   # 画像インデックスの準備
   if [ $total_files -gt 0 ]; then
     preload_image "${sorted_files[0]}" "${temp_dir}/$(basename "${sorted_files[0]}")"
@@ -864,25 +1006,10 @@ main() {
 
       # DNGタグ付け
       base="${jpeg%.*}"
-      dng=""
+      dng=$(find_corresponding_dng "$jpeg")
       echo "DEBUG: JPEG=$jpeg"
       echo "DEBUG: base=$base"
       
-      if [ -f "${base}.DNG" ]; then
-        dng="${base}.DNG"
-        echo "DEBUG: ${base}.DNG が見つかりました"
-      elif [ -f "${base}.dng" ]; then
-        dng="${base}.dng"
-        echo "DEBUG: ${base}.dng が見つかりました" 
-      else
-        echo "DEBUG: DNG検索: ${base}.DNG または ${base}.dng が見つかりません"
-        # 大文字小文字を区別せずに検索
-        possible_dng=$(find "$(dirname "$base")" -maxdepth 1 -type f -iname "$(basename "$base").dng" 2>/dev/null | head -1)
-        if [ -n "$possible_dng" ]; then
-          dng="$possible_dng"
-          echo "DEBUG: 代替検索で見つかったDNG: $dng"
-        fi
-      fi
       if [ -n "$dng" ]; then
         if command -v tag >/dev/null 2>&1; then
           tag --add Yellow "$dng"
@@ -899,14 +1026,11 @@ main() {
         tput el
       fi
       sleep 0.1
-      if [ $current_index -lt $((total_files - 1)) ]; then
-        ((current_index++))
-        # 露出値をリセット
-        current_exposure=0
-        # 画面位置を最上部に初期化
-        tput cup 0 0
-        display_image
-      fi
+      # LIKEした後も同じ画像にとどまるように自動進行処理を削除
+      
+      # 画面を再表示して、LIKE状態を反映する
+      tput cup 0 0
+      display_image
 
     elif [[ $key == $'\e' ]]; then
       read -rsn2 k2
@@ -1082,6 +1206,293 @@ main() {
   fi
 
   exit 0
+}
+
+# JPEGに対応するDNGファイルを探す関数
+find_corresponding_dng() {
+  local jpeg_path="$1"
+  local base="${jpeg_path%.*}"
+  local dng_path=""
+  
+  # 直接対応するDNGを確認（大文字小文字両方）
+  if [ -f "${base}.DNG" ]; then
+    dng_path="${base}.DNG"
+    [ "$DEBUG" -eq 1 ] && echo "DEBUG: ${base}.DNG が見つかりました"
+  elif [ -f "${base}.dng" ]; then
+    dng_path="${base}.dng"
+    [ "$DEBUG" -eq 1 ] && echo "DEBUG: ${base}.dng が見つかりました" 
+  else
+    [ "$DEBUG" -eq 1 ] && echo "DEBUG: DNG検索: ${base}.DNG または ${base}.dng が見つかりません"
+    # 大文字小文字を区別せずに検索
+    possible_dng=$(find "$(dirname "$base")" -maxdepth 1 -type f -iname "$(basename "$base").dng" 2>/dev/null | head -1)
+    if [ -n "$possible_dng" ]; then
+      dng_path="$possible_dng"
+      [ "$DEBUG" -eq 1 ] && echo "DEBUG: 代替検索で見つかったDNG: $dng_path"
+    fi
+  fi
+  
+  echo "$dng_path"
+}
+
+# DNG処理して露出調整を行う関数
+process_dng_with_exposure() {
+  local dng_file="$1"
+  local output_jpeg="$2"
+  local exposure="$3"
+  local bg="$4"
+  
+  if [ ! -f "$dng_file" ]; then
+    return 1
+  fi
+  
+  # 露出値が0の場合は元の画像をそのまま使用（実際には処理しない）
+  if [ "$exposure" -eq 0 ]; then
+    return 2
+  fi
+  
+  # 既に調整済みの画像があればスキップ
+  if [ -f "$output_jpeg" ]; then
+    return 0
+  fi
+  
+  # DNG処理ツールが設定されていなければ確認
+  if [ -z "$DNG_PROCESSOR" ]; then
+    check_dng_processor
+  fi
+  
+  # DNG処理ツールが見つからない場合は対応するJPEGの処理にフォールバック
+  if [ -z "$DNG_PROCESSOR" ] || [ "$DNG_PROCESSOR" = "none" ]; then
+    [ "$DEBUG" -eq 1 ] && echo "DNG処理ツールが利用できません。対応するJPEGを探します..."
+    
+    # 対応するJPEGファイルを探す
+    local jpeg_path="${dng_file%.dng}.jpg"
+    if [ ! -f "$jpeg_path" ]; then
+      jpeg_path="${dng_file%.DNG}.jpg"
+    fi
+    if [ ! -f "$jpeg_path" ]; then
+      jpeg_path="${dng_file%.dng}.jpeg"
+    fi
+    if [ ! -f "$jpeg_path" ]; then
+      jpeg_path="${dng_file%.DNG}.jpeg"
+    fi
+    
+    # JPEGが見つかったら通常の露出調整
+    if [ -f "$jpeg_path" ]; then
+      [ "$DEBUG" -eq 1 ] && echo "対応するJPEGを発見: $jpeg_path"
+      local resized="${temp_dir}/$(basename "$jpeg_path")"
+      
+      # リサイズ済みがなければ作成
+      if [ ! -f "$resized" ]; then
+        preload_image "$jpeg_path" "$resized"
+      fi
+      
+      # JPEGに通常の露出調整を適用
+      if [ "$bg" = "bg" ]; then
+        adjust_exposure "$resized" "$output_jpeg" "$exposure" "bg"
+      else
+        adjust_exposure "$resized" "$output_jpeg" "$exposure"
+      fi
+      return $?
+    else
+      [ "$DEBUG" -eq 1 ] && echo "対応するJPEGも見つかりません。処理をスキップします。"
+      return 3
+    fi
+  fi
+  
+  # 実際に使用するEV値を計算（露出値を-3.0〜+3.0の範囲に変換）
+  local ev_value=$(echo "scale=1; $exposure / 8.333" | bc)
+  
+  # バックグラウンド処理
+  if [ "$bg" = "bg" ]; then
+    {
+      local tmp_out="${output_jpeg}.tmp"
+      
+      case "$DNG_PROCESSOR" in
+        "darktable")
+          # darktable-cliを使用して露出調整
+          # --hq: 高品質モード
+          # --core: GUI無し
+          # -d 0: デバッグ0
+          # Lua scriptを使用する代わりに、XMLファイルを作成して露出を調整
+          local xmp_file=$(mktemp "${temp_dir}/dt_XXXXXX.xmp")
+          cat > "$xmp_file" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 4.4.0-Exiv2">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:darktable="http://darktable.sf.net/">
+   <darktable:history_modversion>2</darktable:history_modversion>
+   <darktable:history_enabled>1</darktable:history_enabled>
+   <darktable:exposure>$ev_value</darktable:exposure>
+   <darktable:history_end>1</darktable:history_end>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+EOF
+          darktable-cli "$dng_file" "$xmp_file" "$tmp_out" --hq --core -d 0 &>/dev/null
+          rm -f "$xmp_file"
+          ;;
+          
+        "rawtherapee")
+          # rawtherapee-cliを使用して露出調整
+          local pp3_file=$(mktemp "${temp_dir}/rt_XXXXXX.pp3")
+          cat > "$pp3_file" << EOF
+[Exposure]
+Compensation=$ev_value
+EOF
+          rawtherapee-cli -o "$tmp_out" -p "$pp3_file" -c "$dng_file" -Y &>/dev/null
+          rm -f "$pp3_file"
+          ;;
+          
+        "dcraw")
+          # dcrawを使用して露出調整
+          local brightness=$(echo "1.0 + $ev_value / 2.0" | bc)
+          
+          # タイムアウト処理を追加（30秒）
+          [ "$DEBUG" -eq 1 ] && echo "dcrawで処理開始: $dng_file (明るさ: $brightness)"
+          
+          # 一時ファイルを作成して段階的に処理
+          local raw_tmp="${temp_dir}/dcraw_tmp_$$.ppm"
+          
+          # まずdcrawで抽出
+          if timeout 30 dcraw -c -b "$brightness" -q 1 -w -h "$dng_file" > "$raw_tmp" 2>"${temp_dir}/dcraw_error.log"; then
+            # 次にconvertで変換
+            if timeout 30 convert "$raw_tmp" "$tmp_out" 2>>"${temp_dir}/dcraw_error.log"; then
+              [ "$DEBUG" -eq 1 ] && echo "dcraw処理成功: $(basename "$tmp_out")"
+              rm -f "$raw_tmp"
+            else
+              [ "$DEBUG" -eq 1 ] && echo "dcrawのconvert処理でエラー: $(cat "${temp_dir}/dcraw_error.log")"
+              rm -f "$tmp_out" "$raw_tmp" 2>/dev/null
+              return 4
+            fi
+          else
+            [ "$DEBUG" -eq 1 ] && echo "dcraw処理でエラー: $(cat "${temp_dir}/dcraw_error.log")"
+            rm -f "$raw_tmp" 2>/dev/null
+            
+            # 簡易モードでの再試行
+            [ "$DEBUG" -eq 1 ] && echo "簡易モードで再試行します"
+            if timeout 20 dcraw -e "$dng_file" && timeout 20 convert "${dng_file%.dng}.thumb.jpg" "$tmp_out"; then
+              [ "$DEBUG" -eq 1 ] && echo "サムネイル抽出に成功しました"
+            else
+              rm -f "$tmp_out" 2>/dev/null
+              return 4
+            fi
+          fi
+          ;;
+          
+        *)
+          # DNG処理ツールが見つからない場合
+          [ "$DEBUG" -eq 1 ] && echo "DNG処理ツールが見つかりません、処理をスキップします"
+          rm -f "$tmp_out" 2>/dev/null
+          return 3
+          ;;
+      esac
+      
+      # 正常に処理された場合は、一時ファイルを出力先に移動
+      if [ -f "$tmp_out" ] && [ -s "$tmp_out" ]; then
+        mv "$tmp_out" "$output_jpeg" 2>/dev/null
+        [ "$DEBUG" -eq 1 ] && echo "DNG処理成功（${ev_value}EV）: $(basename "$output_jpeg")"
+        return 0
+      else
+        [ "$DEBUG" -eq 1 ] && echo "DNG処理失敗: $dng_file"
+        rm -f "$tmp_out" 2>/dev/null
+        return 4
+      fi
+    } &
+    bg_pids+=($!)
+    return 0
+  fi
+  
+  # フォアグラウンド処理
+  local tmp_out="${output_jpeg}.tmp"
+  
+  case "$DNG_PROCESSOR" in
+    "darktable")
+      # darktable-cliを使用して露出調整
+      local xmp_file=$(mktemp "${temp_dir}/dt_XXXXXX.xmp")
+      cat > "$xmp_file" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 4.4.0-Exiv2">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:darktable="http://darktable.sf.net/">
+   <darktable:history_modversion>2</darktable:history_modversion>
+   <darktable:history_enabled>1</darktable:history_enabled>
+   <darktable:exposure>$ev_value</darktable:exposure>
+   <darktable:history_end>1</darktable:history_end>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+EOF
+      darktable-cli "$dng_file" "$xmp_file" "$tmp_out" --hq --core -d 0 &>/dev/null
+      rm -f "$xmp_file"
+      ;;
+      
+    "rawtherapee")
+      # rawtherapee-cliを使用して露出調整
+      local pp3_file=$(mktemp "${temp_dir}/rt_XXXXXX.pp3")
+      cat > "$pp3_file" << EOF
+[Exposure]
+Compensation=$ev_value
+EOF
+      rawtherapee-cli -o "$tmp_out" -p "$pp3_file" -c "$dng_file" -Y &>/dev/null
+      rm -f "$pp3_file"
+      ;;
+      
+    "dcraw")
+      # dcrawを使用して露出調整
+      local brightness=$(echo "1.0 + $ev_value / 2.0" | bc)
+      
+      # タイムアウト処理を追加（30秒）
+      [ "$DEBUG" -eq 1 ] && echo "dcrawで処理開始: $dng_file (明るさ: $brightness)"
+      
+      # 一時ファイルを作成して段階的に処理
+      local raw_tmp="${temp_dir}/dcraw_tmp_$$.ppm"
+      
+      # まずdcrawで抽出
+      if timeout 30 dcraw -c -b "$brightness" -q 1 -w -h "$dng_file" > "$raw_tmp" 2>"${temp_dir}/dcraw_error.log"; then
+        # 次にconvertで変換
+        if timeout 30 convert "$raw_tmp" "$tmp_out" 2>>"${temp_dir}/dcraw_error.log"; then
+          [ "$DEBUG" -eq 1 ] && echo "dcraw処理成功: $(basename "$tmp_out")"
+          rm -f "$raw_tmp"
+        else
+          [ "$DEBUG" -eq 1 ] && echo "dcrawのconvert処理でエラー: $(cat "${temp_dir}/dcraw_error.log")"
+          rm -f "$tmp_out" "$raw_tmp" 2>/dev/null
+          return 4
+        fi
+      else
+        [ "$DEBUG" -eq 1 ] && echo "dcraw処理でエラー: $(cat "${temp_dir}/dcraw_error.log")"
+        rm -f "$raw_tmp" 2>/dev/null
+        
+        # 簡易モードでの再試行
+        [ "$DEBUG" -eq 1 ] && echo "簡易モードで再試行します"
+        if timeout 20 dcraw -e "$dng_file" && timeout 20 convert "${dng_file%.dng}.thumb.jpg" "$tmp_out"; then
+          [ "$DEBUG" -eq 1 ] && echo "サムネイル抽出に成功しました"
+        else
+          rm -f "$tmp_out" 2>/dev/null
+          return 4
+        fi
+      fi
+      ;;
+      
+    *)
+      # DNG処理ツールが見つからない場合
+      [ "$DEBUG" -eq 1 ] && echo "DNG処理ツールが見つかりません、処理をスキップします"
+      rm -f "$tmp_out" 2>/dev/null
+      return 3
+      ;;
+  esac
+  
+  # 正常に処理された場合は、一時ファイルを出力先に移動
+  if [ -f "$tmp_out" ] && [ -s "$tmp_out" ]; then
+    mv "$tmp_out" "$output_jpeg" 2>/dev/null
+    [ "$DEBUG" -eq 1 ] && echo "DNG処理成功（${ev_value}EV）: $(basename "$output_jpeg")"
+    return 0
+  else
+    [ "$DEBUG" -eq 1 ] && echo "DNG処理失敗: $dng_file"
+    rm -f "$tmp_out" 2>/dev/null
+    return 4
+  fi
 }
 
 main

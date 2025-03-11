@@ -1,6 +1,4 @@
-#!/usr/bin/env bash
-# 日本語言語ファイル - image_selector.sh用
-
+# 日本語メッセージ
 MSG_TITLE="画像選択ツール"
 MSG_SEARCHING="検索中"
 MSG_FILES_FOUND="ファイルが見つかりました"
@@ -70,4 +68,11 @@ MSG_SEARCHING_SDCARD="利用可能なSDカードを探しています..."
 MSG_NO_VOLUMES_DIR="/Volumes ディレクトリがありません"
 MSG_NO_VOLUMES="利用可能なボリュームがありません"
 MSG_NO_SDCARD="SDカードが見つかりません"
-MSG_ITERM_ERROR="エラー: iTerm2 か imgcat コマンドが使えません。" 
+MSG_ITERM_ERROR="エラー: iTerm2 か imgcat コマンドが使えません。"
+
+# Like関連
+MSG_LIKES_FOUND="この日付のDNGがlikesフォルダで見つかりました"
+MSG_CONTINUE_FROM_LAST="最後にlikeした写真から続けますか？"
+MSG_YES="はい"
+MSG_NO="いいえ"
+MSG_START_FROM_BEGINNING="最初から始める"

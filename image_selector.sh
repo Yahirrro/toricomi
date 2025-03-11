@@ -194,6 +194,13 @@ define_default_messages() {
   MSG_NO_VOLUMES="利用可能なボリュームがありません"
   MSG_NO_SDCARD="SDカードが見つかりません"
   MSG_ITERM_ERROR="エラー: iTerm2 か imgcat コマンドが使えません。"
+
+  # Like関連
+  MSG_LIKES_FOUND="この日付のDNGがlikesフォルダで見つかりました"
+  MSG_CONTINUE_FROM_LAST="最後にlikeした写真から続けますか？"
+  MSG_YES="はい"
+  MSG_NO="いいえ"
+  MSG_START_FROM_BEGINNING="最初から始める"
 }
 
 # 表示設定 (必要に応じて環境に合わせて調整)
@@ -1196,6 +1203,11 @@ main() {
     done
   fi
   
+  # 選択された日付のDNGファイルがlikesフォルダにあるかチェック
+  local has_liked_files=0
+  local last_liked_index=-1
+  
+  # まず全ファイルをソート
   echo -e "${MSG_SORTING_FILES}"
   sorted_files=()
   tmp_s=$(mktemp)
@@ -1207,15 +1219,82 @@ main() {
     sorted_files+=("$line")
   done < "${tmp_s}.sorted"
   rm -f "$tmp_s" "${tmp_s}.sorted"
-  
+
+  # likesフォルダ内のDNGと比較
+  for ((i=0; i<${#sorted_files[@]}; i++)); do
+    local jpeg="${sorted_files[$i]}"
+    local base_name=$(basename "${jpeg%.*}")
+    if is_dng_in_likes "$base_name"; then
+      has_liked_files=1
+      last_liked_index=$i
+    fi
+  done
+
   total_files=${#sorted_files[@]}
   echo -e "${MSG_FILTERED_FILES}: $total_files"
   echo ""
-  read -n1 -rsp "${MSG_PRESS_ANY_KEY}"
-  
+
+  # likesフォルダに該当する日付のDNGがある場合
+  if [ $has_liked_files -eq 1 ]; then
+    clear
+    echo -e "${MSG_LIKES_FOUND}"
+    echo -e "${MSG_CONTINUE_FROM_LAST}"
+    
+    # 選択肢を表示
+    local options=("${MSG_YES}" "${MSG_NO}")
+    selected=0
+    
+    display_continue_options() {
+      for i in "${!options[@]}"; do
+        if [ $i -eq $selected ]; then
+          echo -e "${HIGHLIGHT}> ${options[$i]}${RESET}"
+        else
+          echo "  ${options[$i]}"
+        fi
+      done
+    }
+    
+    display_continue_options
+    while true; do
+      read -rsn1 key
+      if [[ $key == "" ]]; then
+        chosen_option="${options[$selected]}"
+        break
+      elif [[ $key == $'\e' ]]; then
+        read -rsn2 k2
+        case "$k2" in
+          "[A")
+            [ $selected -gt 0 ] && ((selected--))
+            clear
+            echo -e "${MSG_LIKES_FOUND}"
+            echo -e "${MSG_CONTINUE_FROM_LAST}"
+            display_continue_options
+            ;;
+          "[B")
+            [ $selected -lt $((${#options[@]} - 1)) ] && ((selected++))
+            clear
+            echo -e "${MSG_LIKES_FOUND}"
+            echo -e "${MSG_CONTINUE_FROM_LAST}"
+            display_continue_options
+            ;;
+        esac
+      fi
+    done
+    
+    # 選択に基づいて開始インデックスを設定
+    if [ "$chosen_option" = "${MSG_YES}" ] && [ $last_liked_index -gt -1 ]; then
+      current_index=$((last_liked_index + 1))
+      [ $current_index -ge $total_files ] && current_index=$((total_files - 1))
+    else
+      current_index=0
+    fi
+  else
+    current_index=0
+    read -n1 -rsp "${MSG_PRESS_ANY_KEY}"
+  fi
+
   tput civis  # カーソル非表示
   
-  current_index=0
   LIKED_FILES=()
   TAGGED_DNGS=()
   
